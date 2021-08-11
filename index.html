@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title></title>
+    <link href="https://unpkg.com/tailwindcss@^1.0/dist/tailwind.min.css" rel="stylesheet">
+
+</head>
+<body class="bg-gray-300 text-gray-900">
+
+<div id="app" class="p-12">
+    <div class="grid grid-cols-2 divide-x divide-blue-300">
+        <div class="pr-4">
+            <label class="flex h-full w-full items-center justify-center text-gray-600 border-2 border-dashed hover:border-gray-900"
+                   :class="isDraggingOver ? 'border-gray-900' : 'border-gray-500'"
+                   @drop.prevent="readFile"
+                   @dragover.prevent
+                   @dragenter="isDraggingOver = true"
+                   @dragleave="isDraggingOver = false"
+            >
+                Datei hochladen
+                <input @change="readFile" type="file" class="hidden">
+            </label>
+        </div>
+
+        <div class="pl-4">
+            <textarea rows="10"
+                      class="w-full p-4 border border-gray-400 rounded shadow-lg text-sm"
+                      v-model="shopify_data"></textarea>
+        </div>
+    </div>
+
+
+    <div class="mt-6 text-center">
+        <a :download="fileName"
+           type="text/csv"
+           ref="download"
+           v-show="output.length"
+           class="inline-block px-4 py-2 border bg-blue-600 text-white rounded cursor-pointer"
+        >Download .dat</a>
+    </div>
+
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+
+<script>
+	new Vue({
+		el: "#app",
+
+		data() {
+			return {
+				shopify_data: "",
+				output: [],
+				fileReader: null,
+				fileName: "export.dat",
+				isDraggingOver: false,
+			}
+		},
+
+		created() {
+			this.fileReader = new FileReader()
+
+			this.fileReader.onload = (e) => {
+				this.shopify_data = this.fileReader.result
+			}
+		},
+
+		watch: {
+			shopify_data(v) {
+				if (!v.trim().length) {
+					return
+				}
+
+				this.transform()
+
+				this.$refs["download"].href = URL.createObjectURL(new Blob([this.output.join("\n")], { "type": "text/csv" }))
+			}
+		},
+
+		methods: {
+			readFile(e) {
+				let files = (e.dataTransfer || e.target).files
+
+				if (!files) {
+					return
+				}
+
+				this.fileName = files[0].name.replace(".csv", ".dat")
+				this.fileReader.readAsText(files[0])
+			},
+
+			transform() {
+				let lineItems = this.parse()
+
+				let orderGroups = this.groupBy(lineItems, "Order Number")
+
+				this.output = []
+
+				for (let orderNumber in orderGroups) {
+					this.toOutput(orderGroups[orderNumber])
+				}
+			},
+
+			toOutput(lineItems) {
+				let first = lineItems[0]
+
+				this.output.push([
+					"K",
+					first["Order Number"],
+					first["Shipping Name"],
+					first["Shipping Address1"],
+					first["Shipping Address2"],
+					first["Shipping Zip"],
+					first["Shipping City"],
+					first["Shipping Country Code"],
+					first["Shipping Provider"],
+				].join("|"))
+
+				// Add a "10002" for every "10003"
+				lineItems.filter(l => l["Lineitem SKU"] === "10003").forEach(item => {
+					lineItems.push(Object.assign({ ...item }, { "Lineitem SKU": "10002" }))
+				})
+
+				lineItems.forEach((item, i) => {
+					this.output.push([
+						"P",
+						i + 1,
+						this.realItemSku(item),
+						this.realItemQuantity(item),
+						"",
+						"",
+						"",
+						"",
+						"",
+					].join("|"))
+				})
+			},
+
+			realItemQuantity(item) {
+				let multiplier = {
+					"10002": 1,
+					"10006": 8,
+					"10030": 1,
+					"10031": 1,
+					"10032": 1,
+					"10033": 1,
+				}[item["Lineitem SKU"]] || parseInt(item["Lineitem SKU"].substr(-2))
+				
+				return multiplier * parseInt(item["Lineitem Quantity"])
+			},
+
+			realItemSku(item) {
+				if (item["Lineitem SKU"] === "10002" || item["Lineitem SKU"].match(/^1003[0-3]/)) {
+					return item["Lineitem SKU"]
+				}
+
+				return item["Lineitem SKU"].slice(0, -2) + "01"
+			},
+
+			parse() {
+				let lines = this.shopify_data
+					.trim()
+					.split("\n")
+					.filter(l => l.trim().length > 0)
+
+				let keys = lines.shift().split("\t")
+
+				return lines.map(l => this.zip(keys, l.split("\t")))
+			},
+
+			zip(keys, values) {
+				return keys.reduce((obj, k, i) => ({ ...obj, [k]: values[i] }), {})
+			},
+
+			groupBy(values, key) {
+				return values.reduce(function(rv, x) {
+					(rv[x[key]] = rv[x[key]] || []).push(x)
+
+					return rv
+				}, {})
+			}
+		}
+	})
+</script>
+
+</body>
+</html>
