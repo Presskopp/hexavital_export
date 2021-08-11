@@ -122,6 +122,10 @@
 				lineItems.filter(l => l["Lineitem SKU"] === "10003").forEach(item => {
 					lineItems.push(Object.assign({ ...item }, { "Lineitem SKU": "10002" }))
 				})
+				// Add a "10030" for every "10007"
+				lineItems.filter(l => l["Lineitem SKU"] === "10007").forEach(item => {
+					lineItems.push(Object.assign({ ...item }, { "Lineitem SKU": "10030" }))
+				})
 
 				lineItems.forEach((item, i) => {
 					this.output.push([
@@ -142,6 +146,7 @@
 				let multiplier = {
 					"10002": 1,
 					"10006": 8,
+					"10007": 6,
 					"10030": 1,
 					"10031": 1,
 					"10032": 1,
